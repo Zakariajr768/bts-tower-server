@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BTS Visualizer Pro - FAST VERSION</title>
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-semicircle@2.0.4/Semicircle.min.js"></script>
+    
+    <!-- SheetJS -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --panel-bg: rgba(15, 23, 42, 0.95);
+            --border-color: rgba(255, 255, 255, 0.12);
+            --primary: #3b82f6;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text-main: #f8fafc;
+            --text-sub: #94a3b8;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; width: 100%; overflow: hidden; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg-dark); color: var(--text-main); }
+
+        #map { height: 100vh; width: 100vw; z-index: 1; }
+
+        .dashboard {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 1000;
+            width: 420px;
+            max-height: calc(100vh - 30px);
+            background: var(--panel-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.6);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .dashboard-header {
+            padding: 12px 16px;
+            background: rgba(255,255,255,0.03);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .dashboard-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #38bdf8;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tab-buttons {
+            display: flex;
+            gap: 4px;
+            font-size: 11px;
+        }
+
+        .tab-btn {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border-color);
+            color: var(--text-sub);
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: 0.2s ease;
+        }
+
+        .tab-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            padding: 10px 12px;
+            background: rgba(0,0,0,0.25);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .stat-card {
+            background: rgba(255,255,255,0.03);
+            padding: 8px 4px;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.05);
+            text-align: center;
+        }
+
+        .stat-val { font-size: 13px; font-weight: 700; color: #38bdf8; }
+        .stat-lbl { font-size: 9px; color: var(--text-sub); margin-top: 2px; }
+
+        .dashboard-body {
+            padding: 12px;
+            overflow-y: auto;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        label { font-size: 11px; font-weight: 600; color: var(--text-sub); display: flex; align-items: center; gap: 6px; }
+
+        input[type="file"] { display: none; }
+        .file-drop-zone {
+            border: 2px dashed rgba(59, 130, 246, 0.4);
+            background: rgba(59, 130, 246, 0.05);
+            border-radius: 8px;
+            padding: 12px 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .file-drop-zone:hover, .file-drop-zone.dragover {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: var(--primary);
+        }
+        .file-drop-icon { font-size: 20px; color: #60a5fa; }
+        .file-drop-text { font-size: 11px; font-weight: 600; color: #e2e8f0; }
+        .file-drop-subtext { font-size: 9px; color: var(--text-sub); }
+
+        .progress-wrapper {
+            display: none;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px;
+        }
+
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: #38bdf8;
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+
+        .progress-bar-bg {
+            height: 6px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #3b82f6, #10b981);
+            transition: width 0.2s ease;
+        }
+
+        .file-list-box {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            max-height: 100px;
+            overflow-y: auto;
+            padding: 6px;
+            font-size: 10px;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255,255,255,0.04);
+            padding: 4px 6px;
+            border-radius: 4px;
+            margin-bottom: 2px;
+            color: var(--text-sub);
+        }
+
+        .file-name {
+            font-family: monospace;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 200px;
+        }
+
+        .file-count {
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        textarea {
+            width: 100%;
+            height: 70px;
+            background: rgba(0,0,0,0.4);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px 10px;
+            color: #fff;
+            font-family: monospace;
+            font-size: 11px;
+            resize: vertical;
+        }
+        textarea:focus { outline: none; border-color: var(--primary); }
+
+        .filter-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            font-size: 11px;
+        }
+
+        .btn {
+            padding: 8px 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            transition: 0.2s ease;
+        }
+
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: #2563eb; }
+
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover { background: #059669; }
+
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-danger:hover { background: #dc2626; }
+
+        .btn-secondary { background: rgba(255,255,255,0.08); color: white; }
+        .btn-secondary:hover { background: rgba(255,255,255,0.15); }
+
+        .btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .btn-group.full .btn {
+            grid-column: span 2;
+        }
+
+        .storage-info {
+            font-size: 10px;
+            color: var(--success);
+            background: rgba(16, 185, 129, 0.08);
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .hidden { display: none !important; }
+
+        .export-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard { width: calc(100vw - 30px); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="dashboard">
+    <div class="dashboard-header">
+        <div class="dashboard-title"><i class="fas fa-tower-cell"></i> BTS PRO FAST</div>
+        <div class="tab-buttons">
+            <button class="tab-btn active" onclick="switchTab('upload')">Upload</button>
+            <button class="tab-btn" onclick="switchTab('search')">Search</button>
+            <button class="tab-btn" onclick="switchTab('export')">Export</button>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card"><div class="stat-val" id="statFiles">0</div><div class="stat-lbl">FILES</div></div>
+        <div class="stat-card"><div class="stat-val" id="statSites">0</div><div class="stat-lbl">SITES</div></div>
+        <div class="stat-card"><div class="stat-val" id="statSectors">0</div><div class="stat-lbl">SECTORS</div></div>
+        <div class="stat-card"><div class="stat-val" id="statMapped">0</div><div class="stat-lbl">PLOTTED</div></div>
+    </div>
+
+    <div class="dashboard-body">
+
+        <!-- TAB: UPLOAD -->
+        <div id="tab-upload" class="tab-content">
+            <div class="storage-info" id="storageInfo">📦 Database: Empty</div>
+
+            <div class="form-group">
+                <label><i class="fas fa-file-excel"></i> Select Excel / CSV Files:</label>
+                <div class="file-drop-zone" id="dropZone" onclick="document.getElementById('excelFile').click()">
+                    <i class="fas fa-cloud-arrow-up file-drop-icon"></i>
+                    <div class="file-drop-text">Click or Drag & Drop Files</div>
+                    <div class="file-drop-subtext">Excel (.xlsx, .xls) or CSV (.csv) - Max 20MB</div>
+                </div>
+                <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" multiple>
+            </div>
+
+            <div class="progress-wrapper" id="progressWrapper">
+                <div class="progress-info">
+                    <span id="progressStatus">Processing...</span>
+                    <span id="progressPercent">0%</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" id="progressBarFill"></div>
+                </div>
+            </div>
+
+            <div id="fileListContainer" style="display: none;">
+                <label style="font-size: 10px;">📁 Loaded Files:</label>
+                <div class="file-list-box" id="fileListBox"></div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-danger" onclick="clearStoredData()"><i class="fas fa-trash"></i> Clear DB</button>
+                <button class="btn btn-secondary" onclick="reloadStoredData()"><i class="fas fa-sync"></i> Reload</button>
+            </div>
+        </div>
+
+        <!-- TAB: SEARCH -->
+        <div id="tab-search" class="tab-content hidden">
+            <div class="form-group">
+                <label><i class="fas fa-magnifying-glass"></i> Search Query:</label>
+                <textarea id="searchInput" placeholder="Examples:
+LAC: 9145, Cell: 1040043
+LAC: 6030, Cell: 33
+Site Name"></textarea>
+            </div>
+
+            <div class="filter-row">
+                <label><input type="radio" name="searchMode" value="pair" checked> LAC + Cell</label>
+                <label><input type="radio" name="searchMode" value="cell"> Cell Only</label>
+                <label><input type="radio" name="searchMode" value="site"> Site Name</label>
+                <label><input type="radio" name="searchMode" value="lac"> LAC Only</label>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="searchBTS('sector')"><i class="fas fa-crosshairs"></i> Plot Sector</button>
+                <button class="btn btn-success" onclick="searchBTS('site')"><i class="fas fa-map-pin"></i> Full Site</button>
+            </div>
+
+            <button class="btn btn-secondary" style="grid-column: span 2; margin-top: 4px;" onclick="clearMap()"><i class="fas fa-ban"></i> Clear Map</button>
+        </div>
+
+        <!-- TAB: EXPORT -->
+        <div id="tab-export" class="tab-content hidden">
+            <label style="margin-bottom: 8px;">📤 Export Format:</label>
+            <div class="export-options">
+                <button class="btn btn-primary" onclick="exportData('geojson')"><i class="fas fa-file"></i> GeoJSON</button>
+                <button class="btn btn-primary" onclick="exportData('kml')"><i class="fas fa-map"></i> KML</button>
+                <button class="btn btn-success" onclick="exportData('csv')"><i class="fas fa-table"></i> CSV</button>
+                <button class="btn btn-success" onclick="exportData('json')"><i class="fas fa-code"></i> JSON</button>
+            </div>
+            <p style="font-size: 10px; color: var(--text-sub); margin-top: 10px; text-align: center;">
+                💡 Export plotted sectors for use in other GIS tools.
+            </p>
+        </div>
+
+    </div>
+</div>
+
+<div id="map"></div>
+
+<script>
+    // ==================== MAP INITIALIZATION ====================
+    var map = L.map('map', { zoomControl: false }).setView([23.8103, 90.4125], 7);
+    L.control.zoom({ position: 'topright' }).addTo(map);
+
+    var googleSat = L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
+        maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+    }).addTo(map);
+
+    var googleStreets = L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+        maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+    });
+
+    L.control.layers({ "🛰️ Satellite": googleSat, "🗺️ Streets": googleStreets }, {}, { position: 'topright' }).addTo(map);
+
+    // ==================== GLOBAL DATA ====================
+    var allBtsData = [];
+    var uploadedFiles = [];
+    var currentPlottedData = [];
+    var markersLayer = L.layerGroup().addTo(map);
+
+    // ==================== INDEXEDDB V10 ====================
+    var db;
+    var dbRequest = indexedDB.open("BTS_Database_V10_FAST", 1);
+
+    dbRequest.onupgradeneeded = function(e) {
+        db = e.target.result;
+        if (!db.objectStoreNames.contains("sectors")) {
+            db.createObjectStore("sectors", { keyPath: "id", autoIncrement: true });
+        }
+        if (!db.objectStoreNames.contains("files")) {
+            db.createObjectStore("files", { keyPath: "id" });
+        }
+    };
+
+    dbRequest.onsuccess = function() {
+        db = dbRequest.result;
+        loadStoredData();
+    };
+
+    function loadStoredData(callback) {
+        if (!db) return;
+        var tx = db.transaction(["sectors", "files"], "readonly");
+        var sectorStore = tx.objectStore("sectors");
+        var fileStore = tx.objectStore("files");
+
+        var getSectors = sectorStore.getAll();
+        var getFiles = fileStore.getAll();
+
+        getSectors.onsuccess = function() {
+            allBtsData = getSectors.result || [];
+            updateUI();
+            if (callback) callback();
+        };
+
+        getFiles.onsuccess = function() {
+            uploadedFiles = getFiles.result || [];
+            updateFileList();
+        };
+    }
+
+    function updateUI() {
+        var sectorCount = allBtsData.length;
+        var fileCount = uploadedFiles.length;
+        var uniqueSites = new Set(allBtsData.map(d => d.siteId || d.site || '')).size;
+
+        document.getElementById('statFiles').textContent = fileCount;
+        document.getElementById('statSites').textContent = uniqueSites;
+        document.getElementById('statSectors').textContent = sectorCount.toLocaleString();
+
+        var storageText = sectorCount > 0 
+            ? `✅ Loaded: ${sectorCount.toLocaleString()} sectors from ${fileCount} file(s)`
+            : `❌ Database: Empty`;
+
+        document.getElementById('storageInfo').textContent = storageText;
+    }
+
+    function updateFileList() {
+        var container = document.getElementById('fileListContainer');
+        var listBox = document.getElementById('fileListBox');
+
+        if (uploadedFiles.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+
+        container.style.display = 'flex';
+        listBox.innerHTML = uploadedFiles.map(f => `
+            <div class="file-item">
+                <span class="file-name" title="${f.name}"><i class="fas fa-file"></i> ${f.name}</span>
+                <span class="file-count">${f.rows.toLocaleString()}</span>
+            </div>
+        `).join('');
+    }
+
+    // ==================== FILE UPLOAD ====================
+    var dropZone = document.getElementById('dropZone');
+    var fileInput = document.getElementById('excelFile');
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); });
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        if (e.dataTransfer.files.length) processFiles(e.dataTransfer.files);
+    });
+
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length) processFiles(e.target.files);
+    });
+
+    function updateProgress(status, percent) {
+        document.getElementById('progressWrapper').style.display = 'block';
+        document.getElementById('progressStatus').textContent = status;
+        document.getElementById('progressPercent').textContent = percent + '%';
+        document.getElementById('progressBarFill').style.width = percent + '%';
+    }
+
+    function hideProgress() {
+        setTimeout(() => {
+            document.getElementById('progressWrapper').style.display = 'none';
+        }, 600);
+    }
+
+    // ==================== OPTIMIZED FILE PARSER ====================
+    function parseCSVFast(text) {
+        var lines = text.split(/\r?\n/).filter(l => l.trim());
+        if (lines.length < 2) return [];
+
+        var headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+        var latIdx = findIndex(headers, ['latitude', 'lat', 'y']);
+        var lngIdx = findIndex(headers, ['longitude', 'lng', 'long', 'x']);
+        var lacIdx = findIndex(headers, ['lac', 'tac']);
+        var cellIdx = findIndex(headers, ['cell_id', 'cellid', 'cell']);
+        var siteIdx = findIndex(headers, ['site_id', 'siteid', 'site', 'name']);
+        var azIdx = findIndex(headers, ['azimuth', 'direction', 'bearing']);
+
+        if (latIdx === -1 || lngIdx === -1) return [];
+
+        var rows = [];
+        for (var i = 1; i < lines.length; i++) {
+            var cols = lines[i].split(',');
+            var lat = parseFloat(cols[latIdx]);
+            var lng = parseFloat(cols[lngIdx]);
+
+            if (!isNaN(lat) && !isNaN(lng)) {
+                rows.push({
+                    lat: lat,
+                    lng: lng,
+                    lac: String(cols[lacIdx] || '').trim(),
+                    cellId: String(cols[cellIdx] || '').trim(),
+                    siteId: String(cols[siteIdx] || 'Unknown').trim(),
+                    azimuth: parseFloat(cols[azIdx]) || 0,
+                    beamwidth: 65,
+                    radius: 500
+                });
+            }
+        }
+        return rows;
+    }
+
+    function parseExcelFast(workbook) {
+        var rows = [];
+
+        workbook.SheetNames.forEach(sheetName => {
+            var sheet = workbook.Sheets[sheetName];
+            var json = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+
+            if (!json.length) return;
+
+            var keys = Object.keys(json[0]).map(k => k.toLowerCase());
+            var latIdx = findIndex(keys, ['latitude', 'lat', 'y']);
+            var lngIdx = findIndex(keys, ['longitude', 'lng', 'long', 'x']);
+            var lacIdx = findIndex(keys, ['lac', 'tac']);
+            var cellIdx = findIndex(keys, ['cell_id', 'cellid', 'cell']);
+            var siteIdx = findIndex(keys, ['site_id', 'siteid', 'site', 'name']);
+            var azIdx = findIndex(keys, ['azimuth', 'direction', 'bearing']);
+
+            if (latIdx === -1 || lngIdx === -1) return;
+
+            var keyArray = Object.keys(json[0]);
+            json.forEach(row => {
+                var lat = parseFloat(row[keyArray[latIdx]]);
+                var lng = parseFloat(row[keyArray[lngIdx]]);
+
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    rows.push({
+                        lat: lat,
+                        lng: lng,
+                        lac: String(row[keyArray[lacIdx]] || '').trim(),
+                        cellId: String(row[keyArray[cellIdx]] || '').trim(),
+                        siteId: String(row[keyArray[siteIdx]] || 'Unknown').trim(),
+                        azimuth: parseFloat(row[keyArray[azIdx]]) || 0,
+                        beamwidth: 65,
+                        radius: 500
+                    });
+                }
+            });
+        });
+
+        return rows;
+    }
+
+    function findIndex(arr, keywords) {
+        for (let k of keywords) {
+            let idx = arr.indexOf(k.toLowerCase());
+            if (idx !== -1) return idx;
+        }
+        return -1;
+    }
+
+    // ==================== FILE PROCESSING ====================
+    async function processFiles(files) {
+        var fileList = Array.from(files);
+        var allRows = [];
+        var newFiles = [];
+
+        for (let i = 0; i < fileList.length; i++) {
+            var file = fileList[i];
+
+            if (file.size > 20 * 1024 * 1024) {
+                alert(`File ${file.name} is too large (>20MB). Skipping...`);
+                continue;
+            }
+
+            updateProgress(`Parsing ${file.name}`, Math.round(((i + 1) / fileList.length) * 80));
+
+            var parsed = await parseFileAsync(file);
+            if (parsed.length > 0) {
+                newFiles.push({
+                    id: file.name + '_' + Date.now(),
+                    name: file.name,
+                    rows: parsed.length
+                });
+                allRows.push(...parsed);
+            }
+        }
+
+        if (allRows.length > 0) {
+            updateProgress('Saving to database...', 90);
+            await saveToDB_Batch(allRows, newFiles, () => {
+                updateProgress('✅ Complete!', 100);
+                hideProgress();
+                alert(`Successfully imported ${newFiles.length} file(s) with ${allRows.length.toLocaleString()} sectors!`);
+                fileInput.value = '';
+            });
+        } else {
+            hideProgress();
+            alert('No valid data found in files!');
+        }
+    }
+
+    function parseFileAsync(file) {
+        return new Promise((resolve) => {
+            var isCSV = file.name.toLowerCase().endsWith('.csv');
+
+            if (isCSV) {
+                var reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        var rows = parseCSVFast(e.target.result);
+                        resolve(rows);
+                    } catch {
+                        resolve([]);
+                    }
+                };
+                reader.readAsText(file);
+            } else {
+                var reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        var data = new Uint8Array(e.target.result);
+                        var workbook = XLSX.read(data, { type: 'array' });
+                        var rows = parseExcelFast(workbook);
+                        resolve(rows);
+                    } catch {
+                        resolve([]);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        });
+    }
+
+    function saveToDB_Batch(rows, fileMeta, callback) {
+        var chunkSize = 2000;
+        var idx = 0;
+
+        function writeChunk() {
+            var chunk = rows.slice(idx, idx + chunkSize);
+            if (chunk.length === 0) {
+                var txFiles = db.transaction(['files'], 'readwrite');
+                var fileStore = txFiles.objectStore('files');
+                fileMeta.forEach(f => fileStore.put(f));
+                txFiles.oncomplete = () => { loadStoredData(callback); };
+                return;
+            }
+
+            var tx = db.transaction(['sectors'], 'readwrite');
+            var store = tx.objectStore('sectors');
+            chunk.forEach(item => store.add(item));
+
+            tx.oncomplete = () => {
+                idx += chunkSize;
+                writeChunk();
+            };
+        }
+
+        writeChunk();
+    }
+
+    // ==================== SEARCH & PLOT ====================
+    function searchBTS(type) {
+        var input = document.getElementById('searchInput').value.trim();
+        if (!input) { alert('Enter a search query!'); return; }
+        if (!allBtsData.length) { alert('No data loaded!'); return; }
+
+        var mode = document.querySelector('input[name="searchMode"]:checked').value;
+        var queries = input.split('\n').map(l => l.trim()).filter(Boolean);
+        var matched = [];
+
+        queries.forEach(q => {
+            var results = allBtsData.filter(item => {
+                var qLower = q.toLowerCase();
+                if (mode === 'pair') {
+                    var parts = qLower.split(/[,:\s]+/).filter(Boolean);
+                    if (parts.length >= 2) {
+                        return item.lac.toLowerCase() === parts[0] && item.cellId.toLowerCase() === parts[1];
+                    }
+                    return item.cellId.toLowerCase() === qLower;
+                } else if (mode === 'cell') {
+                    return item.cellId.toLowerCase() === qLower;
+                } else if (mode === 'site') {
+                    return item.siteId.toLowerCase().includes(qLower);
+                } else if (mode === 'lac') {
+                    return item.lac.toLowerCase() === qLower;
+                }
+                return false;
+            });
+
+            if (type === 'site' && results.length) {
+                var sites = new Set(results.map(r => r.siteId));
+                results = allBtsData.filter(d => sites.has(d.siteId));
+            }
+
+            matched.push(...results);
+        });
+
+        var unique = Array.from(new Map(matched.map(m => [JSON.stringify(m), m])).values());
+
+        if (!unique.length) {
+            alert('No matching sectors found!');
+            return;
+        }
+
+        currentPlottedData = unique;
+        plotBTS(unique);
+    }
+
+    function plotBTS(items) {
+        markersLayer.clearLayers();
+        var bounds = L.latLngBounds();
+
+        items.forEach(item => {
+            var wedge = L.semiCircle([item.lat, item.lng], {
+                radius: item.radius || 500,
+                startAngle: (item.azimuth || 0) - (item.beamwidth || 65) / 2,
+                stopAngle: (item.azimuth || 0) + (item.beamwidth || 65) / 2,
+                color: '#ffffff',
+                fillColor: '#ef4444',
+                fillOpacity: 0.4,
+                weight: 1.5
+            });
+
+            var dot = L.circleMarker([item.lat, item.lng], {
+                radius: 5, color: '#fff', fillColor: '#ef4444', fillOpacity: 1, weight: 2
+            });
+
+            var popup = `
+                <div style="font-size:11px; color:#000;">
+                    <b style="color:#ef4444; font-size:12px;">${item.siteId}</b><br>
+                    Cell: ${item.cellId} | LAC: ${item.lac}<br>
+                    Azimuth: ${item.azimuth}° | Radius: ${item.radius}m<br>
+                    <a href="https://maps.google.com/?q=${item.lat},${item.lng}" target="_blank" style="color:#3b82f6;">📍 Google Maps</a>
+                </div>
+            `;
+
+            wedge.bindPopup(popup);
+            dot.bindPopup(popup);
+
+            markersLayer.addLayer(wedge);
+            markersLayer.addLayer(dot);
+
+            bounds.extend([item.lat, item.lng]);
+        });
+
+        document.getElementById('statMapped').textContent = items.length;
+        if (bounds.isValid()) map.fitBounds(bounds, { padding: [100, 100], maxZoom: 16 });
+    }
+
+    function clearMap() {
+        markersLayer.clearLayers();
+        currentPlottedData = [];
+        document.getElementById('statMapped').textContent = 0;
+        document.getElementById('searchInput').value = '';
+    }
+
+    function clearStoredData() {
+        if (!confirm('Clear all saved data? This cannot be undone.')) return;
+        var tx = db.transaction(['sectors', 'files'], 'readwrite');
+        tx.objectStore('sectors').clear();
+        tx.objectStore('files').clear();
+        tx.oncomplete = () => {
+            allBtsData = [];
+            uploadedFiles = [];
+            updateUI();
+            updateFileList();
+            clearMap();
+            alert('Database cleared!');
+        };
+    }
+
+    function reloadStoredData() {
+        loadStoredData(() => { alert('✅ Data reloaded!'); });
+    }
+
+    // ==================== EXPORT ====================
+    function exportData(format) {
+        if (!currentPlottedData.length && !allBtsData.length) {
+            alert('No data to export!');
+            return;
+        }
+
+        var data = currentPlottedData.length ? currentPlottedData : allBtsData;
+        var fileName = `bts_export_${new Date().toISOString().slice(0,10)}`;
+
+        if (format === 'geojson') {
+            var geojson = {
+                type: 'FeatureCollection',
+                features: data.map(item => ({
+                    type: 'Feature',
+                    geometry: { type: 'Point', coordinates: [item.lng, item.lat] },
+                    properties: {
+                        siteId: item.siteId,
+                        cellId: item.cellId,
+                        lac: item.lac,
+                        azimuth: item.azimuth,
+                        radius: item.radius
+                    }
+                }))
+            };
+            downloadJSON(geojson, fileName + '.geojson');
+        } else if (format === 'kml') {
+            var kml = '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>';
+            data.forEach(item => {
+                kml += `<Placemark><name>${item.siteId}</name><Point><coordinates>${item.lng},${item.lat},0</coordinates></Point></Placemark>`;
+            });
+            kml += '</Document></kml>';
+            downloadText(kml, fileName + '.kml');
+        } else if (format === 'csv') {
+            var csv = 'Site,Cell,LAC,Latitude,Longitude,Azimuth,Radius\n';
+            data.forEach(item => {
+                csv += `"${item.siteId}","${item.cellId}","${item.lac}",${item.lat},${item.lng},${item.azimuth},${item.radius}\n`;
+            });
+            downloadText(csv, fileName + '.csv');
+        } else if (format === 'json') {
+            downloadJSON(data, fileName + '.json');
+        }
+
+        alert('✅ Export complete!');
+    }
+
+    function downloadJSON(obj, filename) {
+        var link = document.createElement('a');
+        link.href = 'data:application/json,' + encodeURIComponent(JSON.stringify(obj, null, 2));
+        link.download = filename;
+        link.click();
+    }
+
+    function downloadText(text, filename) {
+        var link = document.createElement('a');
+        link.href = 'data:text/plain,' + encodeURIComponent(text);
+        link.download = filename;
+        link.click();
+    }
+
+    // ==================== TAB SWITCHING ====================
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+        document.getElementById('tab-' + tab).classList.remove('hidden');
+        event.target.classList.add('active');
+    }
+
+</script>
+
+</body>
+</html>
